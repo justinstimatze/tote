@@ -184,6 +184,9 @@ func runCheck(args []string, out io.Writer) error {
 	if rend == nil {
 		return errors.New("reply not found")
 	}
+	if cfg.SkipIf != nil && cfg.SkipIf.MatchString(strings.ReplaceAll(rend.Stable, tote.Chunk, "\n\n")+"\n\n"+rend.Tail) {
+		return errors.New("the transcript window matches TOTE_SKIP_IF, so it is not sent")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	res, err := (&tote.Checker{Cfg: cfg}).Check(ctx, rend)

@@ -62,7 +62,8 @@ func hookEnv(t *testing.T, api *fakeAPI) (state string) {
 	}
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 	if api != nil {
-		t.Setenv("ANTHROPIC_BASE_URL", api.srv.URL)
+		t.Setenv("ANTHROPIC_BASE_URL", "http://127.0.0.1:1") // must be ignored
+		t.Setenv("TOTE_BASE_URL", api.srv.URL)
 	}
 	return filepath.Join(dir, "state", "tote")
 }
@@ -336,7 +337,7 @@ func TestClassifyStaleQuoteAfterEdit(t *testing.T) {
 		break
 	}
 	flags, _ := Classify([]string{"x is 1."}, []Verdict{{Row: 1, Kind: "fact", Verdict: "sure", QuickCheck: true, Source: "r1", Quote: "x = 1"}}, r)
-	if len(flags) != 1 || flags[0].Kind != FlagStale || flags[0].Path != "/a.go" || flags[0].Phrase() != "quoted output predates a later edit to /a.go" {
+	if len(flags) != 1 || flags[0].Kind != FlagStale || flags[0].Path != "/a.go" || flags[0].Phrase() != "quoted output predates a later edit to that file" {
 		t.Fatalf("%+v", flags)
 	}
 }

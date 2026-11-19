@@ -111,7 +111,7 @@ func (f Flag) Phrase() string {
 	case FlagQuoteGone:
 		return "quoted backing not found"
 	case FlagStale:
-		return "quoted output predates a later edit to " + f.Path
+		return "quoted output predates a later edit to that file" // never the path: it comes from the transcript
 	}
 	return f.Kind
 }
@@ -369,7 +369,14 @@ func (c *Checker) Check(ctx context.Context, r *Rendered) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		opts := append([]option.RequestOption{option.WithAPIKey(key), option.WithMaxRetries(2),
+		// the base URL is pinned: the SDK otherwise honours ANTHROPIC_BASE_URL, which a project's settings can set,
+		// and that would send the transcript and the key to whatever host it names
+		base := "https://api.anthropic.com/"
+		if b := os.Getenv("TOTE_BASE_URL"); b != "" { // tote's own variable, set on purpose, never inherited by accident
+			base = b
+		}
+		opts := append([]option.RequestOption{option.WithAPIKey(key), option.WithBaseURL(base),
+			option.WithMaxRetries(2),
 			option.WithRequestTimeout(90 * time.Second)}, c.Opts...)
 		client := anthropic.NewClient(opts...)
 		msg, err := client.Messages.New(ctx, buildParams(cfg.Model, cfg.Effort, buildBlocks(r, numbered)))
@@ -399,6 +406,9 @@ func (c *Checker) Check(ctx context.Context, r *Rendered) (*Result, error) {
 	}
 	flags, judged := Classify(rows, cc.Data.Rows, r)
 	cost, known := Cost(cfg.Model, cc.Usage)
+	if hit { // nothing was billed, so nothing counts toward TOTE_DAILY_USD
+		cost = 0
+	}
 	return &Result{Rows: rows, Flags: flags, Judged: judged, Verdicts: cc.Data.Rows, Cost: cost, CostKnown: known,
 		Usage: cc.Usage, Model: cfg.Model}, nil
 }

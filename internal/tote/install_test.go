@@ -77,9 +77,8 @@ func TestInstallMergesKeepsOtherSettingsAndReplacesRatherThanDuplicates(t *testi
 	if !strings.Contains(string(raw), "12345678901234567890") || !strings.Contains(string(raw), `"timeout": 120`) || !strings.Contains(string(raw), `"async": true`) {
 		t.Fatalf("number mangled or timeout missing: %s", raw)
 	}
-	baks, _ := filepath.Glob(filepath.Join(cfgDir, "settings.local.json.bak-*"))
-	if len(baks) == 0 {
-		t.Fatal("no backup written")
+	if st, err := os.Stat(filepath.Join(cfgDir, "settings.local.json.bak")); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("backup: %v", err)
 	}
 	if st, _ := os.Stat(filepath.Join(cfgDir, "settings.local.json")); st.Mode().Perm() != 0o640 {
 		t.Fatalf("mode changed to %v", st.Mode().Perm())
@@ -91,7 +90,7 @@ func TestInstallMergesKeepsOtherSettingsAndReplacesRatherThanDuplicates(t *testi
 	}
 }
 
-func TestInstallRemoveTakesOutOnlyTheExactCommand(t *testing.T) {
+func TestInstallFromANewPathReplacesTheOldHook(t *testing.T) {
 	dir := t.TempDir()
 	binA, binB := "/opt/a/tote", "/opt/b/tote"
 	var out bytes.Buffer
@@ -100,14 +99,15 @@ func TestInstallRemoveTakesOutOnlyTheExactCommand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// installing the second binary added a second hook: only the exact path is replaced
-	if got := stopCommands(settingsOf(t, dir)); len(got) != 2 {
+	// the second install replaced the first: a moved binary must not leave the old hook running
+	if got := stopCommands(settingsOf(t, dir)); len(got) != 1 || got[0] != HookCommand(binB, InstallOptions{}) {
 		t.Fatalf("%q", got)
 	}
+	// --remove from either binary takes it out
 	if err := Install(dir, binA, true, InstallOptions{}, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := stopCommands(settingsOf(t, dir)); len(got) != 1 || got[0] != HookCommand(binB, InstallOptions{}) {
+	if got := stopCommands(settingsOf(t, dir)); len(got) != 0 {
 		t.Fatalf("%q", got)
 	}
 	out.Reset()

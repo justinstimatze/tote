@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 )
 
 var safeWord = regexp.MustCompile(`^[A-Za-z0-9_@%+=:,./-]+$`)
@@ -43,10 +42,21 @@ func HookCommand(bin string, o InstallOptions) string {
 
 var envPrefix = regexp.MustCompile(`^(?:TOTE_SKIP_IF=(?:'(?:[^']|'\\'')*'|[A-Za-z0-9_@%+=:,./-]+) )?(?:TOTE_REDACT=1 )?$`)
 
-// isOurs reports whether a command is one HookCommand wrote for this binary, with any of its env settings.
+// toteBin matches a binary named tote at any path, quoted or bare, as HookCommand writes it.
+var toteBin = regexp.MustCompile(`(?:'(?:[^']|'\\'')*/tote'|[A-Za-z0-9_@%+=:,./-]*/tote)$`)
+
+// isOurs reports whether a command is one HookCommand wrote, for this binary or a tote binary at another path, with
+// any of its env settings: a reinstall from a new path replaces the old hook instead of leaving it running beside it.
 func isOurs(cmd, bin string) bool {
-	rest, ok := strings.CutSuffix(cmd, ShellQuote(bin)+" hook")
-	return ok && envPrefix.MatchString(rest)
+	rest, ok := strings.CutSuffix(cmd, " hook")
+	if !ok {
+		return false
+	}
+	if r, ok := strings.CutSuffix(rest, ShellQuote(bin)); ok {
+		return envPrefix.MatchString(r)
+	}
+	loc := toteBin.FindStringIndex(rest)
+	return loc != nil && envPrefix.MatchString(rest[:loc[0]])
 }
 
 // isLegacy matches the hook command of the Python version, which a fresh install replaces.
@@ -72,6 +82,9 @@ func Install(projectDir, bin string, remove bool, o InstallOptions, w io.Writer)
 		return fmt.Errorf("%s is not a directory", root)
 	}
 	dest := filepath.Join(root, ".claude", "settings.local.json")
+	if r, err := filepath.EvalSymlinks(dest); err == nil {
+		dest = r // write through a symlinked settings file instead of replacing the link
+	}
 	settings := map[string]any{}
 	mode := os.FileMode(0o644)
 	var original []byte
@@ -157,8 +170,21 @@ func Install(projectDir, bin string, remove bool, o InstallOptions, w io.Writer)
 		return err
 	}
 	if original != nil {
-		if err := os.WriteFile(fmt.Sprintf("%s.bak-%d", dest, time.Now().Unix()), original, mode); err != nil {
+		// one backup, replaced each run, created fresh so a planted symlink at that name is not followed
+		bak := dest + ".bak"
+		if err := os.Remove(bak); err != nil && !os.IsNotExist(err) {
 			return err
+		}
+		f, err := os.OpenFile(bak, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return err
+		}
+		_, werr := f.Write(original)
+		if cerr := f.Close(); werr == nil {
+			werr = cerr
+		}
+		if werr != nil {
+			return werr
 		}
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(dest), ".settings-*")
