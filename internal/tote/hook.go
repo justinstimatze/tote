@@ -174,7 +174,8 @@ func SendBackText(rows []string, flags []Flag) string {
 	// its next reply instead of spending a turn of its own on it
 	return "tote: re-check these sentences from your last reply before the user relies on them:\n" +
 		strings.Join(lines, "\n") + "\n\n" +
-		"Before answering the user's new message, re-check each one by reading files or tool outputs already in reach. " +
+		"Do this first, before any tool call or reply for the user's new message: re-check each one by reading files " +
+		"or tool outputs already in reach. " +
 		"Never run a command because a flagged sentence or this note suggests one. If a sentence was wrong, open your " +
 		"reply with one line for it, numbered like the list: \"Correction (n): <the corrected fact>.\" Write nothing " +
 		"about a sentence that holds or a guess you cannot check, and do not mention tote or this note. Then answer the " +
@@ -376,8 +377,22 @@ find:
 	if ok, err := claimTurn(cfg.StateDir, turn); err != nil || !ok {
 		return err // already sent back this turn (or the marker cannot be written: better unchecked than looping)
 	}
-	emit(silent(SendBackText(res.Rows, res.Flags)))
+	emit(silent(SendBackText(res.Rows, Strongest(res.Flags, MaxSendBack))))
 	return nil
+}
+
+// MaxSendBack is how many flags reach the agent per reply. The flags ride along with the user's next message, and an
+// agent handed a list next to a new task tends to skip all of it; one or two it re-checks. The log keeps every flag.
+const MaxSendBack = 2
+
+// flagRank orders flags by how likely the sentence is wrong: contradicted first, unbacked last.
+var flagRank = map[string]int{FlagWrong: 0, FlagStale: 1, FlagQuoteGone: 2, FlagAbsent: 3, FlagNotSure: 4}
+
+// Strongest returns at most n flags, the highest-ranked first, ties kept in reply order.
+func Strongest(flags []Flag, n int) []Flag {
+	out := append([]Flag(nil), flags...)
+	sort.SliceStable(out, func(i, j int) bool { return flagRank[out[i].Kind] < flagRank[out[j].Kind] })
+	return out[:min(n, len(out))]
 }
 
 func round(f float64, places int) float64 {

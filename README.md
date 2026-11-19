@@ -28,7 +28,7 @@ estimate built from the per-reply costs, not a measured day.
 2. It makes one call to the Anthropic API with the transcript and the reply split into numbered sentences. For each
    sentence that states a fact, the checker answers *why do you think this, and are you sure?* "Sure" requires an exact
    quote from something in the transcript before the reply, and code checks that the quote is really there.
-3. It sends back to the agent, as hidden context, each sentence that is:
+3. It sends back to the agent, as hidden context, at most two sentences, the likeliest wrong first, from those that are:
    - not sure, meaning it rests on memory, an assumption or an unchecked figure;
    - contradicted by the transcript;
    - a claim that something is absent or the only one ("never", "doesn't exist", "no other", "the only"), unless

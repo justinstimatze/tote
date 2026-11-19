@@ -380,3 +380,14 @@ func TestSegmentsAndRenderReadATranscriptFile(t *testing.T) {
 		n++
 	}
 }
+
+func TestStrongestKeepsTheLikeliestWrong(t *testing.T) {
+	fs := []Flag{{Row: 1, Kind: FlagNotSure}, {Row: 2, Kind: FlagAbsent}, {Row: 3, Kind: FlagNotSure}, {Row: 4, Kind: FlagWrong}}
+	got := Strongest(fs, 2)
+	if len(got) != 2 || got[0].Row != 4 || got[1].Row != 2 {
+		t.Fatalf("%+v", got)
+	}
+	if got := Strongest(fs[:1], 2); len(got) != 1 {
+		t.Fatalf("%+v", got)
+	}
+}
