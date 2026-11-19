@@ -523,6 +523,7 @@ var (
 // Render builds one transcript text up to the target reply, labelling each source in place, windowed to
 // windowChars (0 means no window: everything is in Stable).
 func Render(events []*Event, target Target, windowChars int) (*Rendered, error) {
+	var last *Rendered
 	var out []string
 	tools := NewTools()
 	var users []User
@@ -586,6 +587,7 @@ func Render(events []*Event, target Target, windowChars int) (*Rendered, error) 
 			switch {
 			case b.Type == "text" && e.Type == "assistant":
 				if target.matches(b.Text) {
+					// keep going: the last match is the reply, since an earlier one can share its opening words
 					out = append(out, "[REPLY UNDER AUDIT]\n"+b.Text)
 					r := &Rendered{Reply: b.Text, At: len(out) - 1, Tools: tools, Users: users, Summary: summary}
 					if windowChars > 0 {
@@ -593,7 +595,9 @@ func Render(events []*Event, target Target, windowChars int) (*Rendered, error) 
 					} else {
 						r.Stable = strings.Join(out, "\n\n")
 					}
-					return r, nil
+					last = r
+					out[len(out)-1] = "[AGENT]\n" + b.Text
+					continue
 				}
 				out = append(out, "[AGENT]\n"+b.Text)
 			case b.Type == "text" && e.Type == "user" && !strings.HasPrefix(b.Text, "<"):
@@ -616,6 +620,9 @@ func Render(events []*Event, target Target, windowChars int) (*Rendered, error) 
 				out = append(out, fmt.Sprintf("[OUTPUT %s]\n%s", b.ToolUseID, capped(full, ToolCap)))
 			}
 		}
+	}
+	if last != nil {
+		return last, nil
 	}
 	return nil, ErrReplyNotFound
 }

@@ -106,7 +106,7 @@ func Blocks(path string, yield func(SendBack)) error {
 			break
 		}
 	}
-	if cur != nil && cur.reply != "" {
+	if cur != nil {
 		yield(cur.done())
 	}
 	return nil
@@ -146,7 +146,7 @@ func handleBlockLine(line []byte, cur **blockState, yield func(SendBack)) {
 			}
 		}
 		if len(ctx) > 0 {
-			if *cur != nil && (*cur).reply != "" {
+			if *cur != nil {
 				yield((*cur).done())
 			}
 			*cur = &blockState{text: "Stop hook feedback:\n" + ctx[0], use: map[string]modelUsage{}}
@@ -155,7 +155,7 @@ func handleBlockLine(line []byte, cur **blockState, yield func(SendBack)) {
 	}
 	if e.Type == "attachment" { // async send-back: logged when it lands, before the message it rides along with
 		if ctx := asyncToteContext(line); ctx != "" {
-			if *cur != nil && (*cur).reply != "" {
+			if *cur != nil {
 				yield((*cur).done())
 			}
 			*cur = &blockState{text: "Stop hook feedback:\n" + ctx, use: map[string]modelUsage{}, async: true}
@@ -173,7 +173,7 @@ func handleBlockLine(line []byte, cur **blockState, yield func(SendBack)) {
 			if *cur != nil && e.IsMeta { // Claude Code's nudge after an empty turn belongs to the same turn
 				return
 			}
-			if *cur != nil && (*cur).reply != "" {
+			if *cur != nil {
 				yield((*cur).done())
 			}
 			*cur = nil // any other user message ends the turn
@@ -293,12 +293,12 @@ func Score(text string, calls int, reply string) []Scored {
 	}
 	fixes := map[int]string{}
 	for _, m := range found {
-		var i int
+		i := -1
 		if m[1] != "" {
 			n, _ := strconv.Atoi(m[1])
 			i = n - 1
 		} else {
-			best := -1
+			best := 0 // no shared words: the correction is not attributed to any flag
 			for k := range flags {
 				if o := overlap(flags[k], m[2]); o > best {
 					best, i = o, k

@@ -163,8 +163,9 @@ func TestRenderPrefersExactReplyOverEarlierPrefixMatch(t *testing.T) {
 	if err != nil || r.Reply != final {
 		t.Fatalf("exact match found %q, %v", r.Reply, err)
 	}
+	// a prefix shared with an earlier reply resolves to the latest one
 	r, err = Render(events, Target{Prefix: prefix}, 0)
-	if err != nil || r.Reply != early {
+	if err != nil || r.Reply != final {
 		t.Fatalf("prefix match found %q, %v", r.Reply, err)
 	}
 }
@@ -389,5 +390,22 @@ func TestStrongestKeepsTheLikeliestWrong(t *testing.T) {
 	}
 	if got := Strongest(fs[:1], 2); len(got) != 1 {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestStrongestSendsEachSentenceOnce(t *testing.T) {
+	got := Strongest([]Flag{{Row: 1, Kind: FlagNotSure}, {Row: 1, Kind: FlagWrong}, {Row: 2, Kind: FlagNotSure}}, 2)
+	if len(got) != 2 || got[0].Row != 1 || got[0].Kind != FlagWrong || got[1].Row != 2 {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestUnnumberedCorrectionWithNoSharedWordsIsNotAttributed(t *testing.T) {
+	text := "Stop hook feedback:\ntote: re-check these sentences from your last reply before the user relies on them:\n" +
+		"1. \"The cache alpha is full.\" (not sure)\n2. \"Zebra widgets ship today.\" (not sure)\n"
+	for _, s := range Score(text, 1, "Correction: banana yellow.") {
+		if s.Outcome == "corrected" {
+			t.Fatalf("%+v", s)
+		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,7 +19,7 @@ const MinChars = 400
 // install`; the rest can be set in Claude Code's environment.
 type Config struct {
 	Model, Effort string
-	DailyUSD      float64 // 0 means no cap
+	DailyUSD      float64 // the cap, when DailySet
 	DailySet      bool
 	Sample        float64
 	Redact        bool
@@ -45,16 +46,16 @@ func LoadConfig() (*Config, error) {
 	var errs []error
 	if v := os.Getenv("TOTE_DAILY_USD"); v != "" {
 		f, err := strconv.ParseFloat(v, 64)
-		if err != nil || f < 0 {
-			errs = append(errs, fmt.Errorf("TOTE_DAILY_USD=%q is not a dollar amount", v))
+		if err != nil || !(f > 0) || math.IsInf(f, 0) { // !(f > 0) also rejects NaN
+			errs = append(errs, fmt.Errorf("TOTE_DAILY_USD=%q is not a positive dollar amount (use TOTE_CHECK=0 to turn tote off)", v))
 		} else {
 			c.DailyUSD, c.DailySet = f, true
 		}
 	}
 	if v := os.Getenv("TOTE_SAMPLE"); v != "" {
 		f, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("TOTE_SAMPLE=%q is not a number", v))
+		if err != nil || !(f >= 0 && f <= 1) {
+			errs = append(errs, fmt.Errorf("TOTE_SAMPLE=%q is not a fraction from 0 to 1", v))
 		} else {
 			c.Sample = f
 		}

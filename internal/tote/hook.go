@@ -347,7 +347,11 @@ find:
 			break
 		}
 		for events := range Segments(tp) {
-			for _, exact := range []bool{true, false} { // the whole reply first, its first 80 characters as the fallback
+			modes := []bool{true} // the whole reply; its first 80 characters only once the retries are spent, since an
+			if try == 19 {        // earlier reply can share them while this one is not yet written
+				modes = append(modes, false)
+			}
+			for _, exact := range modes {
 				if r, err := Render(events, Target{Full: reply, Prefix: head, Exact: exact}, Window); err == nil {
 					rend = r
 					break find
@@ -397,9 +401,17 @@ var flagRank = map[string]int{FlagWrong: 0, FlagStale: 1, FlagQuoteGone: 2, Flag
 
 // Strongest returns at most n flags, the highest-ranked first, ties kept in reply order.
 func Strongest(flags []Flag, n int) []Flag {
-	out := append([]Flag(nil), flags...)
-	sort.SliceStable(out, func(i, j int) bool { return flagRank[out[i].Kind] < flagRank[out[j].Kind] })
-	return out[:min(n, len(out))]
+	sorted := append([]Flag(nil), flags...)
+	sort.SliceStable(sorted, func(i, j int) bool { return flagRank[sorted[i].Kind] < flagRank[sorted[j].Kind] })
+	var out []Flag
+	seen := map[int]bool{}
+	for _, f := range sorted { // one flag per sentence, the strongest
+		if !seen[f.Row] && len(out) < n {
+			seen[f.Row] = true
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func round(f float64, places int) float64 {

@@ -188,6 +188,9 @@ func Classify(rows []string, verdicts []Verdict, r *Rendered) (flags []Flag, jud
 			if !Verify(&Claim{Quote: c.Quote, CallID: c.CallID, Backing: "summary"}, at, r.Tools, r.Users, r.Summary) {
 				return &Flag{Row: x.Row, Kind: FlagQuoteGone, Why: x.Why}
 			}
+		} else if c.InInput {
+			// the quote is only in the agent's own tool input (an echo, a file it wrote): it backs nothing
+			return &Flag{Row: x.Row, Kind: FlagQuoteGone, Why: x.Why}
 		} else if f := EditedAfter(firstNonEmpty(c.FallbackCall, src), at, r.Tools); f != "" {
 			// anchoring: the quote is real, but the file it came from was edited after it was read
 			return &Flag{Row: x.Row, Kind: FlagStale, Path: f, Why: x.Why}
@@ -345,6 +348,9 @@ func ErrorClass(err error) string {
 func (c *Checker) Check(ctx context.Context, r *Rendered) (*Result, error) {
 	cfg := c.Cfg
 	rows := SplitRows(r.Reply)
+	if len(rows) == 0 { // all code or table rules: nothing to ask about, so no call
+		return &Result{Model: cfg.Model, CostKnown: true}, nil
+	}
 	var nb strings.Builder
 	for i, row := range rows {
 		if i > 0 {
