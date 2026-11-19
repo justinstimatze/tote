@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -68,6 +69,9 @@ type SendBack struct {
 	Calls int
 	Reply string
 	Cost  float64
+	// Async: the flags rode along with the user's next message (an async Stop hook), so the turn that answers them
+	// would have run anyway and its cost is not a corrections turn
+	Async bool
 }
 
 type blockState struct {
@@ -75,9 +79,12 @@ type blockState struct {
 	calls int
 	reply string
 	use   map[string]modelUsage
+	async bool
 }
 
-func (b *blockState) done() SendBack { return SendBack{b.text, b.calls, b.reply, TurnCost(b.use)} }
+func (b *blockState) done() SendBack {
+	return SendBack{b.text, b.calls, b.reply, TurnCost(b.use), b.async}
+}
 
 // Blocks streams the send-backs of one transcript. A turn often answers in text first and checks after ("I'm
 // re-running both"), so the whole turn is read.
@@ -91,7 +98,8 @@ func Blocks(path string, yield func(SendBack)) error {
 	r := bufio.NewReaderSize(f, 1<<20)
 	for {
 		line, rerr := r.ReadBytes('\n')
-		if len(line) > 0 && (cur != nil || bytes.Contains(line, []byte("Stop hook feedback")) || bytes.Contains(line, []byte("hookAdditionalContext"))) {
+		if len(line) > 0 && (cur != nil || bytes.Contains(line, []byte("Stop hook feedback")) || bytes.Contains(line, []byte("hookAdditionalContext")) ||
+			bytes.Contains(line, []byte("async_hook_response"))) {
 			handleBlockLine(line, &cur, yield)
 		}
 		if rerr != nil {
@@ -102,6 +110,27 @@ func Blocks(path string, yield func(SendBack)) error {
 		yield(cur.done())
 	}
 	return nil
+}
+
+// asyncToteContext returns tote's additionalContext from an async Stop hook's attachment entry, or "".
+func asyncToteContext(line []byte) string {
+	var a struct {
+		Attachment struct {
+			Type, HookEvent string
+			Response        struct {
+				HookSpecificOutput struct {
+					AdditionalContext string `json:"additionalContext"`
+				} `json:"hookSpecificOutput"`
+			} `json:"response"`
+		} `json:"attachment"`
+	}
+	if json.Unmarshal(line, &a) != nil || a.Attachment.Type != "async_hook_response" || a.Attachment.HookEvent != "Stop" {
+		return ""
+	}
+	if c := a.Attachment.Response.HookSpecificOutput.AdditionalContext; strings.HasPrefix(c, "tote") {
+		return c
+	}
+	return ""
 }
 
 func handleBlockLine(line []byte, cur **blockState, yield func(SendBack)) {
@@ -124,11 +153,23 @@ func handleBlockLine(line []byte, cur **blockState, yield func(SendBack)) {
 		}
 		return
 	}
+	if e.Type == "attachment" { // async send-back: logged when it lands, before the message it rides along with
+		if ctx := asyncToteContext(line); ctx != "" {
+			if *cur != nil && (*cur).reply != "" {
+				yield((*cur).done())
+			}
+			*cur = &blockState{text: "Stop hook feedback:\n" + ctx, use: map[string]modelUsage{}, async: true}
+		}
+		return
+	}
 	if e.Msg == nil {
 		return
 	}
 	if e.Type == "user" {
 		if c, ok := e.Msg.ContentString(); ok {
+			if *cur != nil && (*cur).async && (*cur).reply == "" && !blockRe.MatchString(c) {
+				return // the prompt the flags rode in with: its answer is where the correction lands
+			}
 			if *cur != nil && e.IsMeta { // Claude Code's nudge after an empty turn belongs to the same turn
 				return
 			}
@@ -339,7 +380,7 @@ func RunOutcomes(stateDir, projectsDir string, w io.Writer) error {
 				if rebutRe.MatchString(b.Reply) {
 					rebutted++
 				}
-				if strings.Contains(b.Text, "re-check these sentences") {
+				if strings.Contains(b.Text, "re-check these sentences") && !b.Async {
 					costs = append(costs, b.Cost)
 				}
 				for _, sc := range Score(b.Text, b.Calls, b.Reply) {

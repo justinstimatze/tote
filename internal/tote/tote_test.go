@@ -351,6 +351,23 @@ func TestOutcomesReadsSilentSendBack(t *testing.T) {
 	}
 }
 
+func TestOutcomesReadsAsyncSendBack(t *testing.T) {
+	ctx := "tote: re-check these sentences from your last reply before the user relies on them:\n1. \"It costs $5.\" (not sure)\n"
+	p := writeLines(t,
+		m{"type": "attachment", "attachment": m{"type": "async_hook_response", "hookEvent": "Stop",
+			"response": m{"hookSpecificOutput": m{"hookEventName": "Stop", "additionalContext": ctx}}}},
+		m{"type": "user", "message": m{"role": "user", "content": "what next?"}},
+		m{"type": "assistant", "message": m{"id": "m", "content": []m{text("Correction (1): It costs $7. Next, the tests.")}}},
+		m{"type": "user", "message": m{"role": "user", "content": "ok"}})
+	var got []SendBack
+	if err := Blocks(p, func(b SendBack) { got = append(got, b) }); err != nil || len(got) != 1 || !got[0].Async {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if s := Score(got[0].Text, got[0].Calls, got[0].Reply); len(s) != 1 || s[0].Outcome != "corrected" {
+		t.Fatalf("%+v", s)
+	}
+}
+
 func TestSegmentsAndRenderReadATranscriptFile(t *testing.T) {
 	p := writeLines(t, asst(text("My reply here.")))
 	n := 0
