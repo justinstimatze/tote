@@ -3,115 +3,137 @@
 A Claude Code Stop hook that catches guesses stated as fact.
 
 An agent often writes "the cache is 40k characters" or "nothing else calls this" because it sounds right, not because
-it checked. It doesn't know these are guesses until someone asks "are you sure?". Tote asks for you, after every reply.
-Each sentence that turns out to be unbacked goes back to the agent, which checks it with a tool and corrects it. You
-never see the exchange. You see only a short `Correction (n): …` line when a sentence was wrong, or the word `Checked.`
-when every flagged sentence held.
+it checked. After every reply of 400 characters or more, tote asks of each sentence: why do you think this, and are you
+sure? Sentences that turn out to be unbacked go back to the agent, which checks them with a tool and corrects them.
+You see only a short `Correction (n): …` line when a sentence was wrong, or the word `Checked.` when every flagged
+sentence held.
+
+**What leaves your machine.** Each checked reply sends the recent part of the session transcript to the Anthropic API,
+up to 120,000 characters. That includes tool outputs, so anything printed in the session goes too, along with CLAUDE.md
+and memory. If that is a problem for a project, see `TOTE_SKIP_IF` below.
+
+**The wait.** The check adds a median of about 17 seconds to a checked reply, and up to about 48 seconds. Those are
+measured over 60 checks.
+
+**The cost.** Per checked reply: $0.04–0.07 while the prompt cache is warm, $0.27–0.34 when it is cold. When a reply is
+sent back, the agent's corrections turn costs about $0.42 (the mean over 24 such turns). For a heavy day of 100 checked
+replies, 80 warm and 20 cold, the checks come to about $9–12. If one reply in five is sent back, that adds about $8.
+Both numbers are estimates built from the per-reply costs. Neither is a measured day.
 
 ## How it works
 
-When the agent finishes a reply of 400 characters or more, the hook:
-
-1. Reads the session transcript, including tool calls and outputs, background-agent results, CLAUDE.md and memory.
-2. Makes one call to Claude Sonnet 5.5 with the transcript and the reply split into numbered sentences. For each
-   sentence that states a fact, the call answers *why do you think this, and are you sure?* "Sure" requires an exact
+1. The hook reads the session transcript, including tool calls and outputs, background-agent results, CLAUDE.md and
+   memory.
+2. It makes one call to the Anthropic API with the transcript and the reply split into numbered sentences. For each
+   sentence that states a fact, the checker answers *why do you think this, and are you sure?* "Sure" requires an exact
    quote from something in the transcript before the reply, and code checks that the quote is really there.
-3. Sends back to the agent, as hidden context, the sentences that are:
-   - not sure, meaning they rest on memory, an assumption or an unchecked figure;
+3. It sends back to the agent, as hidden context, each sentence that is:
+   - not sure, meaning it rests on memory, an assumption or an unchecked figure;
    - contradicted by the transcript;
-   - claims that something is absent ("never", "doesn't exist", "no other"), unless they're hedged;
-   - backed by a quote that isn't in the cited source, or that comes from a file edited after it was read.
+   - a claim that something is absent or the only one ("never", "doesn't exist", "no other", "the only"), unless
+     hedged;
+   - backed by a quote that is not in the cited source, or that comes from a file edited after it was read.
 4. Judgements, plans, questions and sentences the reply already hedges are left alone.
 
-The agent answers once. Tote doesn't check that answer, so a reply is sent back at most once.
+The message to the agent holds the sentence, which is the agent's own words, and a fixed phrase for the kind of flag.
+It never holds the checker's free-text reasons, so text the checker read in the transcript cannot steer the agent. The
+message tells the agent to re-check by reading files or outputs already in reach, and never to run a command that a
+flag suggests. The checker's reasons go to the local log only.
+
+The agent answers once. A turn is sent back at most once, tracked by a marker file per prompt, and the corrections turn
+is not checked again.
 
 ## Install
 
-You need:
-- [uv](https://docs.astral.sh/uv/), which supplies Python 3.12 or later and the one dependency (`anthropic`);
-- `jq` and `bash`, for the installer. It's tested on Linux, should work on macOS, and isn't tested on Windows;
-- an Anthropic API key with billing. Put it in `ANTHROPIC_API_KEY` or in `~/.config/tote/.env` as
-  `ANTHROPIC_API_KEY=…`. A Stop hook doesn't inherit your shell's environment, so the file is the reliable place.
+You need Go and an Anthropic API key with billing. Put the key in `ANTHROPIC_API_KEY` or in `~/.config/tote/.env` as
+`ANTHROPIC_API_KEY=…`. A Stop hook does not inherit your shell's environment, so the file is the reliable place. Tote
+refuses a `.env` that group or others can read; run `chmod 600 ~/.config/tote/.env`.
 
 ```
-git clone <this repo> ~/tote
-~/tote/deploy/claude-hooks/install.sh /path/to/your/project
+go install github.com/justinstimatze/tote@latest
+tote install /path/to/your/project
 ```
 
-`install.sh` adds the hook to the project's `.claude/settings.local.json`, which is gitignored. It keeps your other
-settings and hooks, and writes a backup first. Running it again replaces tote's hook and doesn't add a second copy.
-With no argument it installs into the tote checkout itself.
+`tote install` adds the hook to the project's `.claude/settings.local.json`, which is gitignored. It keeps your other
+settings and hooks, and writes a backup first. Key order inside that file may change. Running it again replaces tote's
+hook and does not add a second copy. The hook command holds the full path of the `tote` binary, so run `tote install`
+again if you move it.
 
-The hook runs tote from where you cloned it. If you move the clone, run `install.sh` again for each project. To take
-tote out of a project, run `install.sh --remove /path/to/your/project`. To switch it off for one session, start
-Claude Code with `TOTE_CHECK=0` in its environment.
+To remove tote from a project, run `tote install --remove /path/to/your/project`. It removes only the hook it installed
+for this binary. To switch tote off for one session, start Claude Code with `TOTE_CHECK=0`
+in its environment.
 
-To see that it's working, look at `data/check/log.jsonl` in the tote checkout. Each reply gets a line there, either
-checked, with its flags and cost, or skipped, with the reason.
+Tote is tested on Linux. It should work on macOS and is not tested on Windows.
 
-If a check fails, the reply goes out unchecked and tote never holds it back. A missing API key or an API error shows
-a one-line notice saying the reply is unchecked. A check still running at the hook's 300-second timeout is stopped
-without that notice.
+## Settings
 
-## What it sends, and what it costs
+Set these in Claude Code's environment, except the first two, which `tote install` writes into the hook command, so
+run it again to change them.
 
-Each checked reply sends the most recent part of the transcript (up to 120,000 characters), plus CLAUDE.md and
-memory, to the Anthropic API.
+| Variable | Effect |
+| --- | --- |
+| `TOTE_SKIP_IF=REGEX` | Skip any turn whose transcript window matches the pattern, for example the command that reads production data. It matches the window that would be sent (the last 120,000 characters), not the whole transcript. Nothing is sent for that turn. The pattern uses Go regexp syntax, with no lookahead. An invalid pattern is an error at install time, and at hook time the turn is skipped and nothing is sent. |
+| `TOTE_REDACT=1` | Keeps transcript text out of tote's local log and turns off the on-disk response cache. It does not change what goes to the API: the transcript is still sent. |
+| `TOTE_DAILY_USD=5` | Caps spend per day across all projects, summed from the log. With a cap set, tote refuses to run on a model it has no price for. |
+| `TOTE_SAMPLE=0.5` | Checks that fraction of turns. |
+| `TOTE_ASK_MODEL`, `TOTE_ASK_EFFORT` | The checker model and effort. The defaults are `claude-sonnet-5-5` at `medium`. |
+| `TOTE_CHECK=0` | Turns the hook off. |
 
-- `TOTE_SKIP_IF=REGEX install.sh DIR` skips any turn whose transcript matches the pattern, for example the command
-  that reads production data. Nothing is sent for that turn.
-- `TOTE_REDACT=1 install.sh DIR` keeps transcript text out of tote's log and turns off the on-disk response cache.
+## Where state lives
 
-Both settings are written into the project's hook command, so to change either one, run the installer again. The log
-(`data/check/log.jsonl`) and the response cache (`data/ask/cache/`) live in the tote checkout, and every project you
-install into shares them.
+Tote keeps its state in `$XDG_STATE_HOME/tote`, which is `~/.local/state/tote` by default. Directories are mode 0700 and
+files 0600.
 
-The transcript goes to the API as a prompt-cached prefix, so consecutive replies in a session mostly re-read it.
-Measured in development sessions: $0.04–0.07 per checked reply while the cache is warm, and $0.27–0.34 when it's cold.
-The cache goes cold about once per 40,000 characters of new transcript, or after an hour idle. When a reply is sent
-back, the agent's corrections turn costs about $0.42 on Opus 5.5 (the mean over 24 such turns).
+- `log.jsonl`: one line per reply, either checked (sentences, flags, cost, seconds) or skipped, with the reason.
+- `blocked/`: one empty marker file per prompt that was sent back.
+- `cache/`: the checker's responses, keyed by content hash.
+- `outcomes.csv` and `misses.csv`, from the commands below.
 
-Optional limits: `TOTE_DAILY_USD` caps spend per day across all projects, and `TOTE_SAMPLE=0.5` checks half of all turns. Both are unset
-by default. `TOTE_ASK_MODEL` and `TOTE_ASK_EFFORT` change the checker model, which defaults to `claude-sonnet-5-5`
-at `medium` effort.
+Every project you install into shares this directory.
+
+## When a check fails
+
+The reply goes out unchecked and tote never holds it back. You see one line: `tote: the check failed (<class>), so
+this reply is unchecked`. The class is a short label such as `api_429`, `timeout`, `no_api_key` or
+`env_file_permissions`. Only the class is logged, never the error text, since that can quote request content. The API
+client retries twice and gives up after about 90 seconds a request. A check still running at the hook's 120-second
+timeout is stopped without a notice.
 
 ## How well it works
 
-All of these numbers come from the author's own Claude Code sessions. The samples are small, and the session data
-isn't included in this repo.
+This is a development set, from the author's own sessions. The samples are small and none of it is held out. The
+session data is not included in this repo.
 
 - **Real guesses.** Five sentences the agent later took back on its own ("I was wrong…") were replayed through the
   checker, and 4 were sent back. The miss was a quote taken from the wrong source: a game's script cited for a claim
   about the TV show.
-- **Hand-labelled flags.** From an earlier version's flags, 6 of 6 labelled real problems were caught, and 1 or 2
-  of 10 labelled false flags came back, depending on the run.
-- **Planted errors.** A tool-backed number was changed in each of 7 real replies, and all 7 sentences were sent back.
-  In 5 of them the checker named the planted number as wrong.
-- **Noise.** Checking unchanged replies, it sends back about 1.4 sentences per 10-sentence reply. In live use, about a
-  third of the sentences sent back turned out to hold, and each of those cost a corrections turn.
+- **Hand-labelled flags.** 6 of 6 labelled real problems were flagged, and 1 or 2 of 10 labelled false flags came back,
+  depending on the run.
+- **Planted errors.** A tool-backed number was changed in each of 7 real replies. All 7 sentences were flagged, and in
+  5 of them the checker named the planted number. A baseline that flags every factual sentence would also flag all 7,
+  so this test shows recall, not precision.
+- **Noise.** On 7 unchanged replies, about 1.4 of 10 sentences per reply were flagged. In live use, about a third of
+  the sentences sent back held when the agent re-checked them, and each of those cost a corrections turn.
 
-What it can't catch: a guess that happens to be right, which costs nothing anyway; a claim backed by a real quote
-from the wrong source; anything the transcript can't show, such as how a product behaves in general. The checker is
-a model, so it has its own blind spots.
+## What it can't catch
+
+- A claim backed by a real quote from a neighbouring source. The quote is in the transcript, so code accepts it, but it
+  is the wrong source for the claim.
+- Anything the transcript cannot show, such as how a product behaves in general.
+- A guess that happens to be right. That costs nothing anyway.
+- Its own blind spots. The checker is a model of the same family as the agent, so the two can share a mistake.
 
 ## Measuring it on your own sessions
 
-Both commands read transcripts and tote's log, and make no API calls.
+These commands read transcripts and tote's log, and make no API calls.
 
 ```
-uv run --project ~/tote python -m tote.outcomes   # per flag: corrected, checked and left standing, or ignored; turn cost
-uv run --project ~/tote python -m tote.misses     # each time the agent took something back, and what tote did with that reply
+tote outcomes   # per flag: corrected, checked and left standing, or ignored; turn cost
+tote misses     # each time the agent took something back, and what tote did with that reply
 ```
 
-`python -m tote.ask <transcript.jsonl> "<first words of a reply>"` checks one past reply and prints its flags.
-
-Every run is logged to `data/check/log.jsonl` with the sentences, flags, cost and time taken.
-
-## History
-
-Tote started as an experiment in having agents bet on their own claims and on each other's, to learn how far to trust
-a model's stated confidence. The question narrowed to whether an agent can tell when it's guessing. It can, but
-mostly only when asked, and this hook does the asking.
+`tote check TRANSCRIPT "first words of a reply"` checks one past reply and prints its flags. It makes one API call.
+With `--json` it prints rows, flags, verdicts and cost, for your own evaluation scripts.
 
 ## License
 
