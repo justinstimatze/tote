@@ -42,8 +42,7 @@ your Claude plan.
 3. A sentence is flagged when it is:
    - contradicted by the transcript;
    - backed by a quote from a file that was edited after it was read;
-   - backed by a quote that is not in the cited source, or that appears only in the agent's own tool input, such as a
-     command it ran or a file it wrote;
+   - backed by a quote that is not in the cited source;
    - a claim that something is absent ("never", "doesn't exist", "no other", "there are no"), unless hedged;
    - not sure, meaning it rests on memory, an assumption or an unchecked figure.
 4. At most two flagged sentences go back to the agent, taken in that order. The rest are written to the log only.
