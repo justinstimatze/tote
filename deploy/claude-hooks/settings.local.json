@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --project __TOTE__ python -W ignore -m tote.check",
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}
