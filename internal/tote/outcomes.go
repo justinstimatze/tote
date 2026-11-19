@@ -194,7 +194,11 @@ func handleBlockLine(line []byte, cur **blockState, yield func(SendBack)) {
 		case b.Type == "tool_use":
 			(*cur).calls++
 		case b.Type == "text" && strings.TrimSpace(b.Text) != "":
-			(*cur).reply = b.Text
+			// every text block of the turn: an async answer puts its correction first and keeps working after it
+			if (*cur).reply != "" {
+				(*cur).reply += "\n"
+			}
+			(*cur).reply += b.Text
 		}
 	}
 }

@@ -357,7 +357,8 @@ func TestOutcomesReadsAsyncSendBack(t *testing.T) {
 		m{"type": "attachment", "attachment": m{"type": "async_hook_response", "hookEvent": "Stop",
 			"response": m{"hookSpecificOutput": m{"hookEventName": "Stop", "additionalContext": ctx}}}},
 		m{"type": "user", "message": m{"role": "user", "content": "what next?"}},
-		m{"type": "assistant", "message": m{"id": "m", "content": []m{text("Correction (1): It costs $7. Next, the tests.")}}},
+		m{"type": "assistant", "message": m{"id": "m", "content": []m{text("Correction (1): It costs $7.")}}},
+		m{"type": "assistant", "message": m{"id": "m2", "content": []m{text("Next, the tests.")}}},
 		m{"type": "user", "message": m{"role": "user", "content": "ok"}})
 	var got []SendBack
 	if err := Blocks(p, func(b SendBack) { got = append(got, b) }); err != nil || len(got) != 1 || !got[0].Async {
