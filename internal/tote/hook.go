@@ -331,12 +331,19 @@ func runHook(ctx context.Context, cfg *Config, hook *HookInput, emit func(map[st
 	}
 	t0 := time.Now()
 	var rend *Rendered
+	// the hook runs async and can start before Claude Code has written the reply to the transcript, so a miss is
+	// retried for a few seconds; nothing waits on this
 find:
-	for events := range Segments(tp) {
-		for _, exact := range []bool{true, false} { // the whole reply first, its first 80 characters as the fallback
-			if r, err := Render(events, Target{Full: reply, Prefix: head, Exact: exact}, Window); err == nil {
-				rend = r
-				break find
+	for try := 0; try < 20; try++ {
+		if try > 0 {
+			time.Sleep(500 * time.Millisecond)
+		}
+		for events := range Segments(tp) {
+			for _, exact := range []bool{true, false} { // the whole reply first, its first 80 characters as the fallback
+				if r, err := Render(events, Target{Full: reply, Prefix: head, Exact: exact}, Window); err == nil {
+					rend = r
+					break find
+				}
 			}
 		}
 	}
