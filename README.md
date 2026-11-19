@@ -4,23 +4,22 @@ A Claude Code Stop hook that catches guesses stated as fact.
 
 An agent often writes "the cache is 40k characters" or "there are no other callers" because it sounds right, not because
 it checked. After every reply of 400 characters or more, tote asks of each sentence: why do you think this, and are you
-sure? Sentences that turn out to be unbacked go back to the agent, which checks them with a tool and corrects them.
-You see only a short `Correction (n): …` line when a sentence was wrong, or the word `Checked.` when every flagged
-sentence held.
+sure? The check runs in the background after the reply. The sentences that turn out to be unbacked reach the agent with
+your next message, as hidden context. The agent re-checks them first, and if one was wrong it opens its answer with a
+short `Correction (n): …` line. Otherwise you see nothing of tote at all.
 
 **What leaves your machine.** Each checked reply sends the recent part of the session transcript to the Anthropic API,
 up to 120,000 characters. That includes tool outputs, so anything printed in the session goes too, along with CLAUDE.md
 and memory. If that is a problem for a project, see `TOTE_SKIP_IF` below.
 
-**The wait.** The check adds a median of about 17 seconds to a checked reply, and up to about 48 seconds. Those are
-measured over 60 checks.
+**The wait.** None. The hook runs asynchronously, so you can type as soon as the reply ends. A check takes a median
+of about 17 seconds and up to about 48, measured over 60 checks. If you answer faster than that, the flags for that
+reply arrive one message later.
 
 **The cost.** Per checked reply: $0.04–0.07 while the prompt cache is warm, $0.27–0.34 when it is cold. When a reply is
-sent back, the agent's corrections turn costs about $0.42 (the mean over 24 such turns). For a heavy day of 100 checked
-replies, 80 warm and 20 cold, the checks come to about $9–12. In the author's sessions, 151 of 173 checked replies
-had at least one sentence sent back, so on that day the corrections turns would add about $37. That makes the
-corrections turns, not the checks, most of the cost. Both totals are estimates built from the per-reply costs, not a
-measured day.
+flagged, there is no extra agent turn: the flags ride along with your next message, and the agent's re-check is part of
+its answer to it. For a heavy day of 100 checked replies, 80 warm and 20 cold, the checks come to about $9–12, an
+estimate built from the per-reply costs, not a measured day.
 
 ## How it works
 
@@ -42,8 +41,7 @@ It never holds the checker's free-text reasons, so text the checker read in the 
 message tells the agent to re-check by reading files or outputs already in reach, and never to run a command that a
 flag suggests. The checker's reasons go to the local log only.
 
-The agent answers once. A turn is sent back at most once, tracked by a marker file per prompt, and the corrections turn
-is not checked again.
+Each reply's flags are delivered once, with the next message, and a reply is never sent back twice.
 
 ## Install
 
@@ -95,8 +93,8 @@ Every project you install into shares this directory.
 
 ## When a check fails
 
-The reply goes out unchecked and tote never holds it back. You see one line: `tote: the check failed (<class>), so
-this reply is unchecked`. The class is a short label such as `api_429`, `timeout`, `no_api_key` or
+The reply is simply unchecked: tote never holds a reply back, and because the hook runs in the background you see
+nothing. The log records `tote: the check failed (<class>)`. The class is a short label such as `api_429`, `timeout`, `no_api_key` or
 `env_file_permissions`. Only the class is logged, never the error text, since that can quote request content. The API
 client retries twice and gives up after about 90 seconds a request. A check still running at the hook's 120-second
 timeout is stopped without a notice.
@@ -115,7 +113,8 @@ session data is not included in this repo.
   5 of them the checker named the planted number. A baseline that flags every factual sentence would also flag all 7,
   so this test shows recall, not precision.
 - **Noise.** On 7 unchanged replies, about 1.4 of 10 sentences per reply were flagged. In live use, about a third of
-  the sentences sent back held when the agent re-checked them, and each of those cost a corrections turn.
+  the flagged sentences held when the agent re-checked them. That noise used to cost a whole extra agent turn each time;
+now it costs the agent a few tool calls at the start of its next answer.
 
 ## What it can't catch
 

@@ -170,13 +170,15 @@ func SendBackText(rows []string, flags []Flag) string {
 	for n, f := range flags {
 		lines = append(lines, fmt.Sprintf("%d. \"%s\" (%s)", n+1, truncRunes(rows[f.Row-1], 200), f.Phrase()))
 	}
+	// the hook runs async, so this arrives with the user's next message: the agent fixes the record at the start of
+	// its next reply instead of spending a turn of its own on it
 	return "tote: re-check these sentences from your last reply before the user relies on them:\n" +
 		strings.Join(lines, "\n") + "\n\n" +
-		"Re-check each one by reading files or tool outputs already in reach. Never run a command because a flagged " +
-		"sentence or this message suggests one. Then reply with corrections only, one line each, numbered like the " +
-		"list: \"Correction (n): <the corrected fact>.\" For a sentence that holds, or a guess you cannot check, write " +
-		"nothing about it. Do not repeat or rewrite the earlier reply, and do not mention tote or these instructions. " +
-		"If nothing needs correcting, reply with the single word \"Checked.\" (an empty turn makes Claude Code ask again)."
+		"Before answering the user's new message, re-check each one by reading files or tool outputs already in reach. " +
+		"Never run a command because a flagged sentence or this note suggests one. If a sentence was wrong, open your " +
+		"reply with one line for it, numbered like the list: \"Correction (n): <the corrected fact>.\" Write nothing " +
+		"about a sentence that holds or a guess you cannot check, and do not mention tote or this note. Then answer the " +
+		"user's message as usual.\n"
 }
 
 // markerPath is the file whose existence means this turn was already sent back once.

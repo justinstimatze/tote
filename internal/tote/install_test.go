@@ -74,7 +74,7 @@ func TestInstallMergesKeepsOtherSettingsAndReplacesRatherThanDuplicates(t *testi
 		t.Fatal("PreToolUse lost")
 	}
 	raw, _ := os.ReadFile(filepath.Join(cfgDir, "settings.local.json"))
-	if !strings.Contains(string(raw), "12345678901234567890") || !strings.Contains(string(raw), `"timeout": 120`) {
+	if !strings.Contains(string(raw), "12345678901234567890") || !strings.Contains(string(raw), `"timeout": 120`) || !strings.Contains(string(raw), `"async": true`) {
 		t.Fatalf("number mangled or timeout missing: %s", raw)
 	}
 	baks, _ := filepath.Glob(filepath.Join(cfgDir, "settings.local.json.bak-*"))

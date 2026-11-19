@@ -132,7 +132,9 @@ func Install(projectDir, bin string, remove bool, o InstallOptions, w io.Writer)
 		}
 	} else {
 		groups = append(groups, map[string]any{"hooks": []any{map[string]any{
-			"type": "command", "command": HookCommand(bin, o), "timeout": HookTimeout}}})
+			"type": "command", "command": HookCommand(bin, o), "timeout": HookTimeout,
+			// async: the user never waits on the check, and its result reaches the agent with the next message
+			"async": true}}})
 	}
 	if len(groups) > 0 {
 		hooks["Stop"] = groups
