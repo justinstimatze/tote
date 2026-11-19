@@ -88,9 +88,9 @@ SCHEMA = {"type": "object", "properties": {"rows": {"type": "array", "items": {"
     "required": ["rows"], "additionalProperties": False}
 
 
-def load(transcript: str, prefix: str):
+def load(path: str, prefix: str):
     """The rendered segment holding the reply, and that segment's index (0 is the newest)."""
-    for i, events in enumerate(transcript.segments(transcript)):
+    for i, events in enumerate(transcript.segments(path)):
         try:
             return transcript.render(events, {"reply": prefix}, window_chars=WINDOW), i
         except SystemExit:
@@ -150,8 +150,8 @@ def call(user: list, key: str) -> dict:
     return r
 
 
-def ask(transcript: str, prefix: str) -> dict:
-    got = load(transcript, prefix)
+def ask(path: str, prefix: str) -> dict:
+    got = load(path, prefix)
     if got is None:
         return {"error": "reply not found"}
     return ask_rendered(*got[0])

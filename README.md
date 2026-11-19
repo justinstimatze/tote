@@ -83,8 +83,8 @@ isn't included in this repo.
 - **Real guesses.** Five sentences the agent later took back on its own ("I was wrong…") were replayed through the
   checker, and 4 were sent back. The miss was a quote taken from the wrong source: a game's script cited for a claim
   about the TV show.
-- **Hand-labelled flags.** From an earlier version's flags, 6 of 6 labelled real problems were caught, and 1 of 10
-  labelled false flags came back.
+- **Hand-labelled flags.** From an earlier version's flags, 6 of 6 labelled real problems were caught, and 1 or 2
+  of 10 labelled false flags came back, depending on the run.
 - **Planted errors.** A tool-backed number was changed in each of 7 real replies, and all 7 sentences were sent back.
   In 5 of them the checker named the planted number as wrong.
 - **Noise.** Checking unchanged replies, it sends back about 1.4 sentences per 10-sentence reply. In live use, about a

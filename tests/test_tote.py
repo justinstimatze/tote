@@ -160,3 +160,10 @@ def test_outcomes_reads_silent_send_back(tmp_path):
     p.write_text("\n".join(json.dumps(x) for x in lines) + "\n")
     (text, calls, reply, cost), = outcomes.blocks(str(p))
     assert [r["outcome"] for r in outcomes.score(text, calls, reply)] == ["corrected"]
+
+
+def test_ask_load_reads_a_transcript_file(tmp_path):
+    p = tmp_path / "t.jsonl"
+    p.write_text(json.dumps({"type": "assistant", "uuid": "a", "message": {"content": [{"type": "text", "text": "My reply here."}]}}) + "\n")
+    (context, found, *_), seg = ask.load(str(p), "My reply")
+    assert found["reply"][0] == "My reply here." and seg == 0
