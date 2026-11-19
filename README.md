@@ -2,7 +2,7 @@
 
 A Claude Code Stop hook that catches guesses stated as fact.
 
-An agent often writes "the cache is 40k characters" or "nothing else calls this" because it sounds right, not because
+An agent often writes "the cache is 40k characters" or "there are no other callers" because it sounds right, not because
 it checked. After every reply of 400 characters or more, tote asks of each sentence: why do you think this, and are you
 sure? Sentences that turn out to be unbacked go back to the agent, which checks them with a tool and corrects them.
 You see only a short `Correction (n): …` line when a sentence was wrong, or the word `Checked.` when every flagged
@@ -17,8 +17,10 @@ measured over 60 checks.
 
 **The cost.** Per checked reply: $0.04–0.07 while the prompt cache is warm, $0.27–0.34 when it is cold. When a reply is
 sent back, the agent's corrections turn costs about $0.42 (the mean over 24 such turns). For a heavy day of 100 checked
-replies, 80 warm and 20 cold, the checks come to about $9–12. If one reply in five is sent back, that adds about $8.
-Both numbers are estimates built from the per-reply costs. Neither is a measured day.
+replies, 80 warm and 20 cold, the checks come to about $9–12. In the author's sessions, 151 of 173 checked replies
+had at least one sentence sent back, so on that day the corrections turns would add about $37. That makes the
+corrections turns, not the checks, most of the cost. Both totals are estimates built from the per-reply costs, not a
+measured day.
 
 ## How it works
 

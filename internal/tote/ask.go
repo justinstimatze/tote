@@ -122,13 +122,12 @@ type Judged struct {
 	Why string `json:"why"`
 }
 
-// a sentence saying something is not there, or that something is the only one: the claims a transcript reader most
-// often wrongly passes. "only" counts only as a scope claim ("the only", "only X calls"), not "I only changed one line".
+// a sentence saying something is not there: the claims a transcript reader most often wrongly passes. Kept to these
+// words: adding "nothing" and "only" sent back sentences whose quote the checker had verified, on the labelled set.
 var absence = regexp.MustCompile(`(?i)\b(?:never|nowhere|doesn't exist|does not exist|don't have|do not have|no other|none of|` +
-	`there (?:is|are) no|isn't (?:there|in|on)|aren't any|not anywhere|nothing(?: else)?|no one|not in|the only|` +
-	`only (?:[\w./-]+ ){1,3}(?:calls?|callers?|uses?|users?|references?|reads?|writes?|sets?|defines?|handles?|imports?|touch(?:es)?|places?|ways?))\b`)
+	`there (?:is|are) no|isn't (?:there|in|on)|aren't any|not anywhere)\b`)
 
-// IsAbsence reports whether the sentence claims something is absent or the only one.
+// IsAbsence reports whether the sentence claims something is absent.
 func IsAbsence(s string) bool { return absence.MatchString(s) }
 
 // EditedAfter returns a file the cited call read (named in its input) that an Edit/Write changed after that call

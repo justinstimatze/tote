@@ -283,7 +283,7 @@ func renderedFor(t *testing.T) *Rendered {
 
 func TestClassify(t *testing.T) {
 	r := renderedFor(t)
-	rows := []string{"The file has 42 rows.", "The file has 43 rows.", "A judgement.", "The file has 42 rows too.", "Nothing else reads it.", "It is 42."}
+	rows := []string{"The file has 42 rows.", "The file has 43 rows.", "A judgement.", "The file has 42 rows too.", "No other file reads it.", "It is 42."}
 	cases := []struct {
 		name    string
 		v       Verdict
