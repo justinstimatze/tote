@@ -193,6 +193,40 @@ func TestWindowChunksStayPutAsTheTranscriptGrows(t *testing.T) {
 	}
 }
 
+func TestWindowHeadSurvivesAStartMove(t *testing.T) {
+	mk := func(n int) ([]string, map[int]bool) {
+		out := []string{"CLAUDE.md " + strings.Repeat("i", 5000)}
+		for i := 1; i < n; i++ {
+			out = append(out, strings.Repeat("x", 3000)+string(rune('a'+i%26)))
+		}
+		return out, map[int]bool{0: true}
+	}
+	o1, p1 := mk(60)
+	o2, p2 := mk(80) // 20 more blocks of 3k characters crosses the 40k grid
+	s1, _ := window(o1, p1, 120_000, 20, 40_000)
+	s2, _ := window(o2, p2, 120_000, 20, 40_000)
+	c1, c2 := strings.Split(s1, Chunk), strings.Split(s2, Chunk)
+	if c1[1] == c2[1] {
+		t.Fatal("expected the window start to move")
+	}
+	if c1[0] != c2[0] || strings.Contains(c2[0], "omitted") {
+		t.Fatal("the head chunk changed when the window start moved")
+	}
+	if !strings.HasPrefix(c2[1], "[... ") {
+		t.Fatalf("omitted marker should open the first window chunk, got %.40q", c2[1])
+	}
+	blocks := buildBlocks(&Rendered{Stable: s2}, "1 x")
+	var marked []int
+	for i, b := range blocks {
+		if b.OfText != nil && b.OfText.CacheControl.TTL != "" {
+			marked = append(marked, i)
+		}
+	}
+	if len(marked) != 2 || marked[0] != 0 || marked[1] != len(c2)-1 {
+		t.Fatalf("cache marks on blocks %v, want the head and the last stable chunk", marked)
+	}
+}
+
 func TestSplitRows(t *testing.T) {
 	got := SplitRows("The cache is 40k. It holds `x.go` files.\n\n- First point here\n  continued line\n| a | b |\n|---|---|\n```\ncode. Here.\n```\nDone.")
 	want := []string{"The cache is 40k.", "It holds `x.go` files.", "First point here continued line", "| a | b |", "Done."}

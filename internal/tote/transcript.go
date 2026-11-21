@@ -671,8 +671,11 @@ func window(out []string, pinned map[int]bool, chars, step, jump int) (string, s
 			head = append(head, out[i])
 		}
 	}
+	// the omitted marker opens the first window chunk, not the head: it changes whenever the start moves, and the head
+	// (instructions and memory) is its own cache chunk that should survive a move
+	marker := ""
 	if start > 0 {
-		head = append(head, fmt.Sprintf("[... %d earlier transcript blocks omitted]", start))
+		marker = fmt.Sprintf("[... %d earlier transcript blocks omitted]", start)
 	}
 	// chunk edges sit on fixed multiples of `step`, so a chunk, once complete, is the same block on every later turn
 	edges := []int{start}
@@ -693,13 +696,24 @@ func window(out []string, pinned map[int]bool, chars, step, jump int) (string, s
 			chunks = append(chunks, join(body[a:b]))
 		}
 	}
+	tail := join(body[cut:])
+	if marker != "" {
+		switch {
+		case len(chunks) > 1:
+			chunks[1] = marker + "\n\n" + chunks[1]
+		case tail != "":
+			tail = marker + "\n\n" + tail
+		default:
+			chunks = append(chunks, marker)
+		}
+	}
 	var kept []string
 	for _, c := range chunks {
 		if c != "" {
 			kept = append(kept, c)
 		}
 	}
-	return strings.Join(kept, Chunk), join(body[cut:])
+	return strings.Join(kept, Chunk), tail
 }
 
 var (

@@ -260,8 +260,9 @@ type Checker struct {
 	Opts []option.RequestOption // extra client options; tests point it at a local server
 }
 
-// buildBlocks lays out the user message: the stable transcript in cache chunks with the 1-hour mark on the last,
-// the tail, and the numbered reply.
+// buildBlocks lays out the user message: the stable transcript in cache chunks with the 1-hour mark on the first
+// (instructions and memory, which outlive a window move) and the last, the tail, and the numbered reply. With the
+// system prompt that is three of the API's four breakpoints.
 func buildBlocks(r *Rendered, numbered string) []anthropic.ContentBlockParamUnion {
 	parts := strings.Split(r.Stable, Chunk)
 	var blocks []anthropic.ContentBlockParamUnion
@@ -271,7 +272,7 @@ func buildBlocks(r *Rendered, numbered string) []anthropic.ContentBlockParamUnio
 			text = "TRANSCRIPT\n\n" + c
 		}
 		b := anthropic.TextBlockParam{Text: text}
-		if i == len(parts)-1 { // earlier chunks are found by the API's lookback
+		if i == 0 || i == len(parts)-1 { // middle chunks are found by the API's lookback
 			b.CacheControl = anthropic.CacheControlEphemeralParam{TTL: anthropic.CacheControlEphemeralTTLTTL1h}
 		}
 		blocks = append(blocks, anthropic.ContentBlockParamUnion{OfText: &b})
